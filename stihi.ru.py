@@ -70,3 +70,4 @@ if __name__ == '__main__':
     autor = 'https://stihi.ru/avtor/wanter'
     variable = requests.Session()
     get_all_poems(autor)
+    print('test')
