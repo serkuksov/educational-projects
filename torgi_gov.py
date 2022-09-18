@@ -57,10 +57,18 @@ def get_list_of_trades(driver):
         link = column[0].find_element(By.XPATH, '*//a[@title="Просмотр"]').get_attribute('href')
         discription = column[3].text
         prise = column[4].text
+        address = column[5].text.split(',')
+        region = address[0]
+        if len(address) > 1:
+            city = address[1]
+        else:
+            city = None
         dict_params = {
             'link': link,
             'discription': discription,
-            'prise': prise
+            'prise': prise,
+            'region': region,
+            'city': city
         }
         list_of_trades.append(dict_params)
     return list_of_trades
@@ -70,14 +78,16 @@ def main():
     type_property = 'Гараж'
     region = 'Татарстан'
     city = 'Казань'
+    try:
+        driver = get_driver()
+        filter_params(driver, type_property, region, city)
+        list_of_trades = get_list_of_trades(driver)
+    except Exception as ex:
+        print(ex)
+    finally:
+        driver.close()
 
-    driver = get_driver()
-
-    filter_params(driver, type_property, region, city)
-    list_of_trades = get_list_of_trades(driver)
     pprint(list_of_trades)
-    driver.close()
-
 
 if __name__ == '__main__':
     main()
