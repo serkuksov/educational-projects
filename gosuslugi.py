@@ -11,9 +11,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
-LOGIN = '+79270306870'
-PASSWORD = 'K.njdf09'
-
 
 class Parser:
     """Открывает браузер (хром) заходит на сайт, проверяет наличие решеных обращений,
@@ -218,15 +215,18 @@ def timer(hour, functin):
             time.sleep(60)
 
 
-def test():
-    print(datetime.datetime.now().time())
+def get_config():
+    with open('config.txt', 'r', encoding='utf-8') as file:
+        config = json.load(file)
+        return config
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     create_dir(name_dir='.\Госуслуги')
+    config = get_config()
     # timer(1, test)
-    parser = Parser(login=LOGIN, password=PASSWORD)
+    parser = Parser(login=config['LOGIN'], password=config['PASSWORD'])
     parser.authorization_user()
     time.sleep(5)
     statements = parser.get_statements()
