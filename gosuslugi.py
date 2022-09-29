@@ -16,7 +16,7 @@ class Parser:
     """Открывает браузер (хром) заходит на сайт, проверяет наличие решеных обращений,
     сравнивает с БД, скачивает файлы"""
     URL = 'https://www.gosuslugi.ru/'
-    search_for_days_before = 7
+    search_for_days_before = 400
 
     def __init__(self, login, password, timeaut=7):
         self.login = login
@@ -203,13 +203,23 @@ def create_dir(name_dir: str):
 
 
 def timer(hour, functin):
+    logging.info(f'Жду времени начала сбора данных ({hour}:00)')
     while True:
         # Тайм зона Москва +3
         time_zone = datetime.timezone(datetime.timedelta(hours=3))
         current_time = datetime.datetime.now(time_zone).time()
         if datetime.time(hour) < current_time:
-            functin()
+            try:
+                functin()
+            except:
+                logging.error(f'Ошибка!!! Что то пошло не так, вторая попытка через 1 минуту')
+                time.sleep(60)
+                try:
+                    functin()
+                except:
+                    logging.error(f'Ошибка!!! Не удачная вторая попытка')
             time_sleep = (24 - current_time.hour) * 3600
+            logging.info(f'Засыпаю на сутки')
             time.sleep(time_sleep)
         else:
             time.sleep(60)
@@ -220,12 +230,9 @@ def get_config():
         config = json.load(file)
         return config
 
-
-def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+def data_parsing():
     create_dir(name_dir='.\Госуслуги')
     config = get_config()
-    # timer(1, test)
     parser = Parser(login=config['LOGIN'], password=config['PASSWORD'])
     parser.authorization_user()
     time.sleep(5)
@@ -236,6 +243,11 @@ def main():
         if statement['status'] == 'Услуга оказана' and create_dir(name_dir):
             logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
             parser.save_statement(link, name_dir)
+def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.info(f'Парсер запущен')
+    timer(17, data_parsing)
+
 
 if __name__ == '__main__':
     main()
