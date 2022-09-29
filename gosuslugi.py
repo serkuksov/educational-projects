@@ -1,4 +1,5 @@
 import logging
+import shutil
 import time
 import datetime
 import os
@@ -118,62 +119,64 @@ class Parser:
         logging.info(f'Информация о всех видимых заявках собрана')
         return self.statements
 
-    def get_date_acceptane_in_deb(self, name_doc):
-        try:
-            input_poisk = self.driver.find_element(By.CSS_SELECTOR, 'input[placeholder="Поиск"]')
-            input_poisk.click()
-            input_poisk.clear()
-            input_poisk.send_keys(name_doc)
-            button_poisk = self.driver.find_element(By.CSS_SELECTOR, 'button[id="searchButton"]')
-            button_poisk.click()
-            time.sleep(self.timeaut)
-            try:
-                self.tr_doc = self.driver.find_element(By.XPATH, f"//td[contains(text(), '{name_doc}')]")
-            except:
-                self.tr_doc = None
-                logging.error('Документ в ДЭБ не найден!!!')
-                raise Exception('Документ в ДЭБ не найден!!!')
-            logging.info(f'Найден документ: {self.tr_doc.text}')
-            data_acceptance = self.tr_doc.find_element(By.XPATH, "following::td[1]").text
-            logging.info(f'Дата утверждения: {data_acceptance}')
-        except:
-            logging.error('Ошибка!!! Ошибка парсинга при поиске документа')
-            raise Exception()
-        return data_acceptance
+    def save_statement(self, link, out_dir):
+        self.driver.get(link)
+        time.sleep(self.timeaut)
+        self.driver.find_element(By.XPATH, '//div[contains(text(), "Показать историю")]').click()
+        time.sleep(self.timeaut)
+        dict_files = self.downloads_files()
+        self.save_text_statement_history(out_dir)
+        self.save_file_in_out_dir(out_dir, dict_files)
 
-    def downloads_doc_from_deb(self, name_doc):
-        if self.tr_doc == None:
-            self.get_date_acceptane_in_deb(name_doc)
+    def save_text_statement_history(self, out_dir):
+        name_file = out_dir + '\\' + 'История заявления.txt'
+        statuses = self.driver.find_elements(By.XPATH, '//div[@class="order-status-content"]')
+        text = ''
+        for status in statuses:
+            text += status.text
+            text += '\n'
+        with open(name_file, 'w', encoding='utf-8') as file:
+            file.write(text)
+        logging.info(f'Сохранена история заявления')
+
+    def downloads_files(self):
         try:
-            self.tr_doc.click()
-            time.sleep(self.timeaut)
-            tr_file = self.tr_doc.find_element(By.XPATH, "parent::*/following::td[1]")
-            icons = tr_file.find_elements(By.XPATH, "//i[contains(concat(' ', @class, ' '), 'mdi-file-word')]")
-            for icon in icons:
-                a_file = icon.find_element(By.XPATH, "parent::*/parent::*//a")
-                name_file = a_file.text
-                if 'уф' in name_file.casefold() or 'изм' in name_file.casefold():
-                    continue
-                else:
-                    word_doc = a_file
-                    break
-            try:
-                word_doc.click()
-            except:
-                logging.error('Документ в word не найден!')
-                raise Exception()
-            logging.info(f'Скачиваю файл: {name_file}')
-            time.sleep(self.timeaut)
-        except:
-            logging.error('Ошибка!!! Ошибка парсинга при скачивании документа')
-            raise Exception()
-        try:
-            path_file = self._get_path_duwnload_file(name_file)
-        except:
-            logging.info(f'Жду еще 15 секунд.')
+            groups_docs = self.driver.find_elements(By.XPATH, '//div[@class="files-block"]')
+            i = 0
+            dict_files = {}
+            for docs in groups_docs:
+                list_files = []
+                docs = docs.find_elements(By.XPATH, './/div[@class="file-wrapper"]')
+                for doc in docs:
+                    name_doc = doc.find_element(By.XPATH, './div/div[1]/div/div[2]').text
+                    if name_doc.split('.')[-1] == 'xml':
+                        continue
+                    list_files.append(name_doc)
+                    doc.find_element(By.XPATH, './/ul[@class="flex-container"]/li/a').click()
+                    time.sleep(1)
+                dict_files[i] = list_files
+                i += 1
             time.sleep(15)
-            path_file = self._get_path_duwnload_file(name_file)
-        return path_file
+            return dict_files
+        except:
+            logging.error('Ошибка парсинга!!! Не удалось начать скачивать файлы')
+            raise Exception()
+
+    def save_file_in_out_dir(self, out_dir:str, dict_files: dict):
+        for key, name_files in dict_files.items():
+            if name_files:
+                if key == 0:
+                    subfolder = 'Получено'
+                else:
+                    subfolder = 'Отправлено'
+                new_out_dir = out_dir + '\\' + subfolder
+                if not os.path.exists(new_out_dir):
+                    os.mkdir(new_out_dir)
+                for name_file in name_files:
+                    path_file = self.get_path_duwnload_file(name_file)
+                    shutil.copy(path_file, new_out_dir)
+                    os.remove(path_file)
+        logging.info(f'Сохранены файлы заявления')
 
     # Получить путь к скаченому файлу
     def get_path_duwnload_file(self, name_file: str):
@@ -191,7 +194,7 @@ class Parser:
             logging.info(f'Путь к скаченомц файлу: {path_file}')
             return path_file
         except:
-            logging.error(f'Ошибка!!! Не удалось скачать файл')
+            logging.error(f'Ошибка!!! Не удалось найти файл в папке загрузок')
             raise Exception()
 
 
@@ -199,14 +202,6 @@ def create_dir(name_dir: str):
     if not os.path.exists(name_dir):
         os.mkdir(name_dir)
         return True
-
-
-def save_file():
-    pass
-
-
-def chek_application_number(application_number: str):
-    pass
 
 
 def timer(hour, functin):
@@ -234,17 +229,12 @@ def main():
     parser.authorization_user()
     time.sleep(5)
     statements = parser.get_statements()
-
-    with open('data.txt', 'r', encoding='utf-8') as file:
-        statements = json.load(file)
-
     for statement in statements:
         name_dir = '.\Госуслуги' + '\\' + statement['number']
+        link = statement['link']
         if statement['status'] == 'Услуга оказана' and create_dir(name_dir):
-            pass
-
-
-
+            logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
+            parser.save_statement(link, name_dir)
 
 if __name__ == '__main__':
     main()

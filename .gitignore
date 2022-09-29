@@ -1,5 +1,6 @@
 /venv/
 /.idea/
+/Госуслуги/
 /avito.csv
 /avito.db
 /chromedriver.exe
