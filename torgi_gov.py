@@ -86,7 +86,7 @@ def main():
         print(ex)
     finally:
         driver.close()
-
+    #TODO нужно довать тип объявления в выдачу
     pprint(list_of_trades)
 
 if __name__ == '__main__':

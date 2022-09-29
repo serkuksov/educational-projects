@@ -1,15 +1,15 @@
 from peewee import SqliteDatabase, Model, AutoField, TextField, DateTimeField, DateField, PrimaryKeyField, CharField, \
     IntegerField
 
-db = SqliteDatabase('avito.db')
-db2 = SqliteDatabase('parser.db')
+db = SqliteDatabase('parser.db')
+
 
 class BaseModel(Model):
     class Meta:
         database = db
 
 
-class Garage(BaseModel):
+class Torgi(BaseModel):
     id = PrimaryKeyField()
     name = CharField()
     href = CharField()
