@@ -16,9 +16,9 @@ class Parser:
     """Открывает браузер (хром) заходит на сайт, проверяет наличие решеных обращений,
     сравнивает с БД, скачивает файлы"""
     URL = 'https://www.gosuslugi.ru/'
-    search_for_days_before = 400
+    search_for_days_before = 600
 
-    def __init__(self, login, password, timeaut=7):
+    def __init__(self, login, password, debugging=False, timeaut=7):
         self.login = login
         self.password = password
         self.timeaut = timeaut
@@ -28,7 +28,7 @@ class Parser:
             # option.add_argument("--disable-blink-features=AutomationControlled")
             option.add_argument('--log-level=5')
             option.add_argument("--start-maximized")
-            option.headless = False
+            option.headless = not debugging
             self.driver = Chrome(service=Service(ChromeDriverManager().install()), options=option)
             # self.driver.set_window_size(1920, 1080)
             logging.info(f'Браузер открыт')
@@ -202,7 +202,7 @@ def create_dir(name_dir: str):
         return True
 
 
-def timer(hour, functin):
+def timer(hour: int, functin):
     logging.info(f'Жду времени начала сбора данных ({hour}:00)')
     while True:
         # Тайм зона Москва +3
@@ -219,7 +219,7 @@ def timer(hour, functin):
                 except:
                     logging.error(f'Ошибка!!! Не удачная вторая попытка')
             time_sleep = (24 - current_time.hour) * 3600
-            logging.info(f'Засыпаю на сутки')
+            logging.info(f'Засыпаю на {24 - current_time.hour} часов')
             time.sleep(time_sleep)
         else:
             time.sleep(60)
@@ -233,7 +233,7 @@ def get_config():
 def data_parsing():
     create_dir(name_dir='.\Госуслуги')
     config = get_config()
-    parser = Parser(login=config['LOGIN'], password=config['PASSWORD'])
+    parser = Parser(login=config['LOGIN'], password=config['PASSWORD'], debugging=bool(int(get_config()['DEBUGGING'])))
     parser.authorization_user()
     time.sleep(5)
     statements = parser.get_statements()
@@ -246,7 +246,8 @@ def data_parsing():
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info(f'Парсер запущен')
-    timer(17, data_parsing)
+    HOUR_START = int(get_config()['HOUR_START'])
+    timer(hour=HOUR_START, functin=data_parsing)
 
 
 if __name__ == '__main__':
