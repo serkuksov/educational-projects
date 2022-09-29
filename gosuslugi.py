@@ -133,7 +133,8 @@ class Parser:
         statuses = self.driver.find_elements(By.XPATH, '//div[@class="order-status-content"]')
         text = ''
         for status in statuses:
-            text += status.text
+            list_status = status.text.split('\n')
+            text += list_status[1] + ' ' + list_status[0]
             text += '\n'
         with open(name_file, 'w', encoding='utf-8') as file:
             file.write(text)
