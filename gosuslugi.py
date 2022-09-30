@@ -253,9 +253,26 @@ def timer(hour: int, function):
 
 
 def get_config():
-    with open('config.txt', 'r', encoding='utf-8') as file:
-        config = json.load(file)
+    try:
+        with open('config.txt', 'r', encoding='utf-8') as file:
+            config = json.load(file)
+    except:
+        logging.error('Ошибка!!! Не удалось найти или открыть файл конфигурации')
+        raise Exception()
+    list_config = list(config.keys())
+    verification_list_config = [
+        "LOGIN",
+        "PASSWORD",
+        "HOUR_START",
+        "TIMEOUT",
+        "DEBUGGING",
+        "ORGANIZATION"
+    ]
+    if list_config == verification_list_config:
         return config
+    else:
+        logging.error('Ошибка!!! В файле конфигурации нет части настроек')
+        raise Exception()
 
 
 def data_parsing():
