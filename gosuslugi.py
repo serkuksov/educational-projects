@@ -117,7 +117,13 @@ class Parser:
 
     def get_statements(self):
         self.statements = []
-        self.driver.find_element(By.XPATH, '//a/span[contains(text(), "Заявления")]').click()
+        # time.sleep(800)
+        try:
+            self.driver.find_element(By.XPATH, '//a/span[contains(text(), "Заявления")]').click()
+        except:
+            self.driver.find_element(By.XPATH, '//div/a[contains(text(), "Заявления")]').click()
+            time.sleep(self.timeout)
+            self.driver.find_element(By.XPATH, '//div/span[contains(text(), "Уведомления")]').click()
         time.sleep(self.timeout)
         statements_driver = self.search_statements()
         try:
