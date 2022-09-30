@@ -265,10 +265,14 @@ def data_parsing():
             logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
             parser.save_statement(link, name_dir)
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    logging.info(f'Парсер запущен')
-    HOUR_START = int(get_config()['HOUR_START'])
-    timer(hour=HOUR_START, function=data_parsing)
+    if int(get_config()['DEBUGGING']):
+        logging.basicConfig(filename='log_gosuslugi.txt', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+        data_parsing()
+    else:
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+        logging.info(f'Парсер запущен')
+        HOUR_START = int(get_config()['HOUR_START'])
+        timer(hour=HOUR_START, function=data_parsing)
 
 
 if __name__ == '__main__':
