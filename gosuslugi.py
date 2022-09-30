@@ -16,32 +16,33 @@ class Parser:
     """Открывает браузер (хром) заходит на сайт, проверяет наличие решеных обращений,
     сравнивает с БД, скачивает файлы"""
     URL = 'https://www.gosuslugi.ru/'
-    search_for_days_before = 600
+    search_for_days_before = 7
 
-    def __init__(self, login, password, debugging=False, timeaut=7):
+    def __init__(self, login, password, organization=False, timeout=7):
         self.login = login
         self.password = password
-        self.timeaut = timeaut
+        self.organization = organization
+        self.timeout = timeout
         try:
             option = ChromeOptions()
             # option.add_argument('dom.webdriver.enabled', False)
             # option.add_argument("--disable-blink-features=AutomationControlled")
             option.add_argument('--log-level=5')
             option.add_argument("--start-maximized")
-            option.headless = not debugging
+            option.headless = False
             self.driver = Chrome(service=Service(ChromeDriverManager().install()), options=option)
             # self.driver.set_window_size(1920, 1080)
             logging.info(f'Браузер открыт')
         except:
-            logging.error('Веб драйвер не работает!!!')
-            raise Exception('Веб драйвер не работает!!!')
+            logging.error('Ошибка браузера!!! Веб драйвер не работает')
+            raise Exception()
         try:
             self.driver.get(self.URL)
             logging.info(f'Открываю Госуслуги')
-            time.sleep(self.timeaut)
+            time.sleep(self.timeout)
         except:
-            logging.error('Не удалось открыть ДЭБ!!!')
-            raise Exception('Не удалось открыть ДЭБ!!!')
+            logging.error('Ошибка браузера!!! Не удалось открыть сайт')
+            raise Exception()
 
     def __del__(self):
         self.driver.close()
@@ -51,7 +52,7 @@ class Parser:
     def authorization_user(self):
         try:
             self.driver.find_element(By.XPATH, '//button/span[contains(text(), "Войти")]').click()
-            time.sleep(self.timeaut)
+            time.sleep(self.timeout)
         except:
             logging.error('Ошибка парсинга!!! Не найдена кнопка входа')
             raise Exception()
@@ -65,9 +66,23 @@ class Parser:
             input_password.clear()
             input_password.send_keys(self.password)
             self.driver.find_element(By.XPATH, '//button[contains(text(), "Войти")]').click()
+            time.sleep(self.timeout)
         except:
             logging.error('Ошибка парсинга!!! При вводе данных авторизации')
             raise Exception()
+        if self.organization:
+            have_account_organization = self.driver.find_elements(By.XPATH, '//h3[contains(text(), "Войти как")]')
+            try:
+                if have_account_organization:
+                    self.driver.find_element(By.XPATH, '//p[contains(text(), "Частное лицо")]').click()
+                    logging.info(f'Выполнен вход как частное лицо')
+                    time.sleep(self.timeout)
+                else:
+                    logging.error('Ошибка конфигурации!!! Вы не можете войти как организация. '
+                                  'Таких прав нет у вашего аккаунта')
+            except:
+                logging.error('Ошибка парсинга!!! При выборе "Войти как"')
+                raise Exception()
         logging.info(f'Авторизация прошла успешно')
 
     def page_scrolling(self):
@@ -94,7 +109,7 @@ class Parser:
     def get_statements(self):
         self.statements = []
         self.driver.find_element(By.XPATH, '//a/span[contains(text(), "Заявления")]').click()
-        time.sleep(self.timeaut)
+        time.sleep(self.timeout)
         statements_driver = self.search_statements()
         try:
             for elm in statements_driver:
@@ -118,9 +133,13 @@ class Parser:
 
     def save_statement(self, link, out_dir):
         self.driver.get(link)
-        time.sleep(self.timeaut)
-        self.driver.find_element(By.XPATH, '//div[contains(text(), "Показать историю")]').click()
-        time.sleep(self.timeaut)
+        time.sleep(self.timeout)
+        try:
+            self.driver.find_element(By.XPATH, '//div[contains(text(), "Показать историю")]').click()
+            logging.info(f'Нажата кнопка "Показать историю"')
+            time.sleep(self.timeout)
+        except:
+            logging.info(f'Кнопка "Показать историю" отсутствует')
         dict_files = self.downloads_files()
         self.save_text_statement_history(out_dir)
         self.save_file_in_out_dir(out_dir, dict_files)
@@ -160,7 +179,7 @@ class Parser:
             logging.error('Ошибка парсинга!!! Не удалось начать скачивать файлы')
             raise Exception()
 
-    def save_file_in_out_dir(self, out_dir:str, dict_files: dict):
+    def save_file_in_out_dir(self, out_dir: str, dict_files: dict):
         for key, name_files in dict_files.items():
             if name_files:
                 if key == 0:
@@ -174,7 +193,7 @@ class Parser:
                     path_file = self.get_path_duwnload_file(name_file)
                     shutil.copy(path_file, new_out_dir)
                     os.remove(path_file)
-        logging.info(f'Сохранены файлы заявления')
+        logging.info(f'Сохранены файлы заявления, если они имелись')
 
     # Получить путь к скаченому файлу
     def get_path_duwnload_file(self, name_file: str):
@@ -202,7 +221,7 @@ def create_dir(name_dir: str):
         return True
 
 
-def timer(hour: int, functin):
+def timer(hour: int, function):
     logging.info(f'Жду времени начала сбора данных ({hour}:00)')
     while True:
         # Тайм зона Москва +3
@@ -210,12 +229,12 @@ def timer(hour: int, functin):
         current_time = datetime.datetime.now(time_zone).time()
         if datetime.time(hour) < current_time:
             try:
-                functin()
+                function()
             except:
                 logging.error(f'Ошибка!!! Что то пошло не так, вторая попытка через 1 минуту')
                 time.sleep(60)
                 try:
-                    functin()
+                    function()
                 except:
                     logging.error(f'Ошибка!!! Не удачная вторая попытка')
             time_sleep = (24 - current_time.hour) * 3600
@@ -233,9 +252,11 @@ def get_config():
 def data_parsing():
     create_dir(name_dir='.\Госуслуги')
     config = get_config()
-    parser = Parser(login=config['LOGIN'], password=config['PASSWORD'], debugging=bool(int(get_config()['DEBUGGING'])))
+    parser = Parser(login=config['LOGIN'],
+                    password=config['PASSWORD'],
+                    organization=config['ORGANIZATION'],
+                    timeout=config['TIMEOUT'])
     parser.authorization_user()
-    time.sleep(5)
     statements = parser.get_statements()
     for statement in statements:
         name_dir = '.\Госуслуги' + '\\' + statement['number']
@@ -247,7 +268,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info(f'Парсер запущен')
     HOUR_START = int(get_config()['HOUR_START'])
-    timer(hour=HOUR_START, functin=data_parsing)
+    timer(hour=HOUR_START, function=data_parsing)
 
 
 if __name__ == '__main__':
