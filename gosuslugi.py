@@ -13,8 +13,9 @@ from selenium.webdriver.common.by import By
 
 
 class Parser:
-    """Открывает браузер (хром) заходит на сайт, проверяет наличие решеных обращений,
-    сравнивает с БД, скачивает файлы"""
+    """Открывает браузер (хром) заходит на сайт Госулуг, проверяет наличие закрытых обращений,
+    сравнивает, скачивает файлы"""
+
     URL = 'https://www.gosuslugi.ru/'
     search_for_days_before = 7
 
@@ -249,13 +250,14 @@ def get_config():
         config = json.load(file)
         return config
 
+
 def data_parsing():
     create_dir(name_dir='.\Госуслуги')
     config = get_config()
     parser = Parser(login=config['LOGIN'],
                     password=config['PASSWORD'],
-                    organization=config['ORGANIZATION'],
-                    timeout=config['TIMEOUT'])
+                    organization=bool(int(config['ORGANIZATION'])),
+                    timeout=int(config['TIMEOUT']))
     parser.authorization_user()
     statements = parser.get_statements()
     for statement in statements:
@@ -264,12 +266,18 @@ def data_parsing():
         if statement['status'] == 'Услуга оказана' and create_dir(name_dir):
             logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
             parser.save_statement(link, name_dir)
+
+
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    handler = logging.FileHandler('log_gosuslugi.txt', 'a', 'utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    root_logger.addHandler(handler)
     if int(get_config()['DEBUGGING']):
-        logging.basicConfig(filename='log_gosuslugi.txt', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
         data_parsing()
     else:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
         logging.info(f'Парсер запущен')
         HOUR_START = int(get_config()['HOUR_START'])
         timer(hour=HOUR_START, function=data_parsing)
