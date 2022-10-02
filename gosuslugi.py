@@ -19,7 +19,7 @@ class Parser:
     URL = 'https://www.gosuslugi.ru/'
     search_for_days_before = 7
 
-    def __init__(self, login, password, organization=False, timeout=7):
+    def __init__(self, login, password, organization=0, timeout=7):
         self.login = login
         self.password = password
         self.organization = organization
@@ -73,22 +73,17 @@ class Parser:
             raise Exception()
         # Проверка на наличия страницы Войти как
         have_account_organization = self.driver.find_elements(By.XPATH, '//div/h3[contains(text(), "Войти как")]')
-        # have_account_organization = self.driver.find_elements(By.XPATH, '//h3[contains(@text(), "Войти как")]')
-        # have_account_organization = self.driver.find_elements(By.XPATH, '//div/h3[contains(., "Войти как")]')
-        # have_account_organization = self.driver.find_elements(By.XPATH, '//div/h3[@class="auth-title"]')
         if have_account_organization:
+            list_organization = self.driver.find_elements(By.XPATH, '//button')
             try:
-                if self.organization:
-                    self.driver.find_element(By.XPATH, '//p[contains(text(), "Сотрудник")]').click()
-                    logging.info(f'Выполнен вход как сотрудник')
-                else:
-                    self.driver.find_element(By.XPATH, '//p[contains(text(), "Частное лицо")]').click()
-                    logging.info(f'Выполнен вход как частное лицо')
+                name = list_organization[self.organization].find_element(By.TAG_NAME, 'h4').text
+                list_organization[self.organization].click()
+                logging.info(f'Выполнен вход как {name}')
                 time.sleep(self.timeout)
             except:
                 logging.error('Ошибка парсинга!!! При выборе "Войти как"')
                 raise Exception()
-        elif self.organization:
+        elif self.organization > 0:
             logging.error('Ошибка конфигурации!!! Вы не можете войти как организация. '
                           'Таких прав нет у вашего аккаунта')
 
@@ -118,12 +113,16 @@ class Parser:
     def get_statements(self):
         self.statements = []
         # time.sleep(800)
-        try:
+        if self.organization == 0:
             self.driver.find_element(By.XPATH, '//a/span[contains(text(), "Заявления")]').click()
-        except:
+        else:
             self.driver.find_element(By.XPATH, '//div/a[contains(text(), "Заявления")]').click()
             time.sleep(self.timeout)
-            self.driver.find_element(By.XPATH, '//div/span[contains(text(), "Уведомления")]').click()
+            self.driver.find_element(By.XPATH, '//div[@id="content"]//div/span[contains(text(), "Уведомления")]/..').click()
+            # print(v)
+            # for i in v:
+            #     print(i.get_attribute('innerHTML'))
+            #     print(i.text)
         time.sleep(self.timeout)
         statements_driver = self.search_statements()
         try:
@@ -286,7 +285,7 @@ def data_parsing():
     config = get_config()
     parser = Parser(login=config['LOGIN'],
                     password=config['PASSWORD'],
-                    organization=bool(int(config['ORGANIZATION'])),
+                    organization=int(config['ORGANIZATION']),
                     timeout=int(config['TIMEOUT']))
     parser.authorization_user()
     statements = parser.get_statements()
