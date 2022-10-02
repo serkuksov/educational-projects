@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 import time
 import datetime
@@ -17,7 +18,7 @@ class Parser:
     сравнивает, скачивает файлы"""
 
     URL = 'https://www.gosuslugi.ru/'
-    search_for_days_before = 3
+    search_for_days_before = 2
 
     def __init__(self, login, password, organization=0, timeout=7):
         self.login = login
@@ -31,6 +32,12 @@ class Parser:
             option.add_argument('--log-level=5')
             option.add_argument("--start-maximized")
             option.headless = False
+            option.add_experimental_option('prefs', {
+                # "download.default_directory": "C:/Users/517/Download", #Change default directory for downloads
+                # "download.prompt_for_download": False, #To auto download the file
+                # "download.directory_upgrade": True,
+                "plugins.always_open_pdf_externally": True  # It will not show PDF directly in chrome
+            })
             self.driver = Chrome(service=Service(ChromeDriverManager().install()), options=option)
             # self.driver.set_window_size(1920, 1080)
             logging.info(f'Браузер открыт')
@@ -76,10 +83,16 @@ class Parser:
         if have_account_organization:
             list_organization = self.driver.find_elements(By.XPATH, '//button')
             try:
-                name = list_organization[self.organization].find_element(By.TAG_NAME, 'h4').text
-                list_organization[self.organization].click()
-                logging.info(f'Выполнен вход как {name}')
-                time.sleep(self.timeout)
+                try:
+                    name = list_organization[self.organization].find_element(By.TAG_NAME, 'h4').text
+                    list_organization[self.organization].click()
+                    logging.info(f'Выполнен вход как {name}')
+                except:
+                    logging.error(f'Ошибка!!! Конфиг файл не правильно задан. Оганизации № {self.organization} нет"')
+                    list_organization[0].click()
+                    name = list_organization[0].find_element(By.TAG_NAME, 'h4').text
+                    logging.info(f'Выполнен вход как {name}')
+                time.sleep(self.timeout+3)
             except:
                 logging.error('Ошибка парсинга!!! При выборе "Войти как"')
                 raise Exception()
@@ -132,9 +145,15 @@ class Parser:
         if self.organization == 0:
             self.driver.find_element(By.XPATH, '//a/span[contains(text(), "Заявления")]').click()
         else:
-            self.driver.find_element(By.XPATH, '//div/a[contains(text(), "Заявления")]').click()
-            time.sleep(self.timeout)
-            self.driver.find_element(By.XPATH, '//div[@id="content"]//div/span[contains(text(), "Уведомления")]/..').click()
+            try:
+                self.driver.find_element(By.XPATH, '//div/a[contains(text(), "Заявления")]').click()
+            except:
+                time.sleep(self.timeout+5)
+                self.driver.find_element(By.XPATH, '//div/a[contains(text(), "Заявления")]').click()
+                time.sleep(1)
+            self.driver.get('https://lk.gosuslugi.ru/notifications?type=ORDER')
+            # time.sleep(self.timeout)
+            # self.driver.find_element(By.XPATH, '//div[@id="content"]//div/span[contains(text(), "Уведомления")]/..').click()
             # print(v)
             # for i in v:
             #     print(i.get_attribute('innerHTML'))
@@ -143,11 +162,18 @@ class Parser:
         statements_driver = self.search_statements()
         try:
             for elm in statements_driver:
-                link = elm.get_attribute('href')
-                status = elm.find_element(By.XPATH, './/div[@class="visually-hidden"]').text
-                number = elm.find_element(By.XPATH, './div/div/div[1]/div/div[1]').text
-                date_messages = elm.find_element(By.XPATH, './div/div/div[1]/div/div[2]').text
-                name = elm.find_element(By.XPATH, './/h4').text
+                if self.organization == 0:
+                    link = elm.get_attribute('href')
+                    status = elm.find_element(By.XPATH, './/div[@class="visually-hidden"]').text
+                    number = elm.find_element(By.XPATH, './div/div/div[1]/div/div[1]').text.strip()
+                    date_messages = elm.find_element(By.XPATH, './div/div/div[1]/div/div[2]').text
+                    name = elm.find_element(By.XPATH, './/h4').text
+                else:
+                    link = elm.find_element(By.XPATH, './/div[@class="visually-hidden"]/..')
+                    status = elm.find_element(By.XPATH, './/div[@class="visually-hidden"]').text
+                    number = None
+                    date_messages = None
+                    name = None
                 self.statements.append({
                     'link': link,
                     'status': status,
@@ -161,7 +187,7 @@ class Parser:
         logging.info(f'Информация о всех видимых заявках собрана')
         return self.statements
 
-    def save_statement(self, link, out_dir):
+    def save_statement_faces(self, link, out_dir):
         self.driver.get(link)
         time.sleep(self.timeout)
         try:
@@ -176,7 +202,7 @@ class Parser:
 
     def save_text_statement_history(self, out_dir):
         name_file = out_dir + '\\' + 'История заявления.txt'
-        statuses = self.driver.find_elements(By.XPATH, '//div[@class="order-status-content"]')
+        statuses = self.driver.find_elements(By.XPATH, '//div[contains(@class,"status")]/p/span[2]')
         text = ''
         for status in statuses:
             list_status = status.text.split('\n')
@@ -187,51 +213,101 @@ class Parser:
         logging.info(f'Сохранена история заявления')
 
     def downloads_files(self):
-        try:
-            groups_docs = self.driver.find_elements(By.XPATH, '//div[@class="files-block"]')
-            i = 0
-            dict_files = {}
-            for docs in groups_docs:
-                list_files = []
-                docs = docs.find_elements(By.XPATH, './/div[@class="file-wrapper"]')
-                for doc in docs:
-                    name_doc = doc.find_element(By.XPATH, './div/div[1]/div/div[2]').text
-                    if name_doc.split('.')[-1] == 'xml':
-                        continue
-                    list_files.append(name_doc)
-                    doc.find_element(By.XPATH, './/ul[@class="flex-container"]/li/a').click()
-                    time.sleep(1)
-                dict_files[i] = list_files
-                i += 1
-            time.sleep(15)
-            return dict_files
-        except:
-            logging.error('Ошибка парсинга!!! Не удалось начать скачивать файлы')
-            raise Exception()
+        if self.organization == 0:
+            try:
+                groups_docs = self.driver.find_elements(By.XPATH, '//div[@class="files-block"]')
+                i = 0
+                dict_files = {}
+                for docs in groups_docs:
+                    list_files = []
+                    docs = docs.find_elements(By.XPATH, './/div[@class="file-wrapper"]')
+                    for doc in docs:
+                        name_doc = doc.find_element(By.XPATH, './div/div[1]/div/div[2]').text
+                        if name_doc.split('.')[-1] == 'xml':
+                            continue
+                        list_files.append(name_doc)
+                        doc.find_element(By.XPATH, './/ul[@class="flex-container"]/li/a').click()
+                        time.sleep(1)
+                    dict_files[i] = list_files
+                    i += 1
+                time.sleep(15)
+                return dict_files
+            except:
+                logging.error('Ошибка парсинга!!! Не удалось начать скачивать файлы')
+                raise Exception()
+        else:
+            try:
+                groups_docs = self.driver.find_elements(By.XPATH, '//div[contains(@class,"order-files")]')
+                i = 0
+                dict_files = {}
+                for docs in groups_docs:
+                    list_files = []
+                    if i == 0:
+                        docs = docs.find_elements(By.XPATH, './/div[@class="file-name"]')
+                    elif i == 1:
+                        docs = docs.find_elements(By.XPATH, './/div[@class="notification-file-text"]')
+                    for doc in docs:
+                        name_doc = doc.text
+                        link_file = doc.find_element(By.TAG_NAME, 'a').get_attribute('href')
+                        if '.xml' in name_doc:
+                            continue
+                        else:
+                            try:
+                                name_doc = re.search('[\S]*.(pdf|ods|odt)', name_doc)[0]
+                            except:
+                                logging.error(f'Ошибка регулярного выражения!!! Не определен тип файла {name_doc}')
+                                continue
+                        self.driver.get(link_file)
+                        time.sleep(1)
+                        list_files.append(name_doc)
+                    dict_files[i] = list_files
+                    i += 1
+                return dict_files
+            except:
+                logging.error('Ошибка парсинга!!! Не удалось начать скачивать файлы')
+                raise Exception()
 
     def save_file_in_out_dir(self, out_dir: str, dict_files: dict):
         for key, name_files in dict_files.items():
             if name_files:
-                if key == 0:
-                    subfolder = 'Получено'
+                if self.organization == 0:
+                    if key == 0:
+                        subfolder = 'Получено'
+                    else:
+                        subfolder = 'Отправлено'
                 else:
-                    subfolder = 'Отправлено'
+                    if key == 1:
+                        subfolder = 'Получено'
+                    else:
+                        subfolder = 'Отправлено'
                 new_out_dir = out_dir + '\\' + subfolder
                 if not os.path.exists(new_out_dir):
                     os.mkdir(new_out_dir)
                 for name_file in name_files:
-                    path_file = self.get_path_duwnload_file(name_file)
+                    try:
+                        path_file = self.get_path_duwnload_file(name_file)
+                    except:
+                        continue
                     shutil.copy(path_file, new_out_dir)
-                    os.remove(path_file)
+                    time.sleep(1)
+                    try:
+                        os.remove(path_file)
+                    except:
+                        time.sleep(10)
+                        os.remove(path_file)
         logging.info(f'Сохранены файлы заявления, если они имелись')
 
     def get_path_duwnload_file(self, name_file: str):
         try:
+            # name_file = name_file.split('.')[0]
             downloads_path = str(Path.home() / "Downloads")
             result = []
             for root, dirs, files in os.walk(downloads_path):
                 for f in files:
                     if name_file in f:
+                        if 'crdownload' in f:
+                            time.sleep(10)
+                            f = f.split('.crdownload')[0]
                         path_file = os.path.join(root, f)
                         time_save = os.path.getmtime(path_file)
                         result.append((time_save, path_file))
@@ -240,9 +316,73 @@ class Parser:
             logging.info(f'Путь к скаченомц файлу: {path_file}')
             return path_file
         except:
-            logging.error(f'Ошибка!!! Не удалось найти файл в папке загрузок')
+            logging.error(f'Ошибка!!! Не удалось найти {name_file} в папке загрузок. Файл пропущен')
             raise Exception()
 
+    def click_button(self):
+        try:
+            self.driver.find_element(By.XPATH, '//span[contains(text(), "История рассмотрения")]').click()
+            logging.info(f'Нажата кнопка "История рассмотрения"')
+            time.sleep(self.timeout)
+        except:
+            logging.info(f'Кнопка "История рассмотрения" отсутствует')
+        try:
+            self.driver.find_element(By.XPATH, '//span[contains(text(), "Все файлы")]').click()
+            logging.info(f'Нажата кнопка "Все файлы"')
+            time.sleep(self.timeout)
+        except:
+            logging.info(f'Кнопка "История рассмотрения" отсутствует')
+        try:
+            self.driver.find_element(By.XPATH, '//span[contains(text(), "Еще")]').click()
+            logging.info(f'Нажата кнопка "Еще x файл(-а)"')
+            time.sleep(self.timeout)
+        except:
+            logging.info(f'Кнопка "Еще" отсутствует')
+
+    def save_statement_organizations(self):
+        statements_driver = self.driver.find_elements(By.XPATH, '//div[@data-ng-include="feedsListTpl"]/div')
+        count_statements = len(statements_driver)
+        logging.info(f'Записей к просмотру: {count_statements}')
+        self.driver.get('https://lk.gosuslugi.ru/notifications?type=ORDER')
+        time.sleep(self.timeout+10)
+        for i in range(count_statements):
+            statements_driver = self.driver.find_elements(By.XPATH, '//div[@data-ng-include="feedsListTpl"]/div')
+            if i >= len(statements_driver):
+                while len(statements_driver) < count_statements:
+                    self.driver.find_element(By.XPATH, '//a[contains(text(), "Показать еще")]').click()
+                    logging.info(f'Нажата кнопка "Показать еще"')
+                    time.sleep(self.timeout)
+                    statements_driver = self.driver.find_elements(By.XPATH, '//div[@data-ng-include="feedsListTpl"]/div')
+                    if i < len(statements_driver):
+                        break
+            elm = statements_driver[i]
+            status = elm.find_element(By.XPATH, './/div[@class="visually-hidden"]').text
+            if status == 'Услуга оказана':
+                elm.click()
+                time.sleep(self.timeout+2)
+                logging.info(f'Открываю услугу № {i+1}')
+                try:
+                    statement = self.driver.find_element(By.XPATH, '//h2/span[2]').text
+                except:
+                    time.sleep(self.timeout)
+                    statement = self.driver.find_element(By.XPATH, '//h2/span[2]').text
+                name_dir = '.\Госуслуги' + '\\' + statement
+                if not os.path.exists(name_dir):
+                    self.click_button()
+                    os.mkdir(name_dir)
+                    self.save_text_statement_history(name_dir)
+                    time.sleep(self.timeout)
+                    dict_files = self.downloads_files()
+                    self.save_file_in_out_dir(name_dir, dict_files)
+                    logging.info(f'Выполнено сохранение услуги: {statement}')
+                try:
+                    link_back = self.driver.find_element(By.XPATH, '//a[contains(text(), "Вернуться к списку")]').get_attribute('href')
+                    self.driver.get(link_back)
+                    logging.info(f'Нажата кнопка "Вернуться к списку"')
+                    time.sleep(self.timeout+2)
+                except:
+                    logging.error(f'Кнопка "Вернуться к списку" отсутствует')
+                    raise Exception()
 
 def create_dir(name_dir: str):
     if not os.path.exists(name_dir):
@@ -296,21 +436,26 @@ def get_config():
         raise Exception()
 
 
-def data_parsing():
+def data_parsing(timeout=0):
     create_dir(name_dir='.\Госуслуги')
     config = get_config()
+    if timeout>0:
+        config['TIMEOUT'] = 15
     parser = Parser(login=config['LOGIN'],
                     password=config['PASSWORD'],
                     organization=int(config['ORGANIZATION']),
                     timeout=int(config['TIMEOUT']))
     parser.authorization_user()
     statements = parser.get_statements()
-    for statement in statements:
-        name_dir = '.\Госуслуги' + '\\' + statement['number']
-        link = statement['link']
-        if statement['status'] == 'Услуга оказана' and create_dir(name_dir):
-            logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
-            parser.save_statement(link, name_dir)
+    if int(config['ORGANIZATION']) == 0:
+        for statement in statements:
+            name_dir = '.\Госуслуги' + '\\' + statement['number']
+            link = statement['link']
+            if statement['status'] == 'Услуга оказана' and create_dir(name_dir):
+                logging.info(f'Начинаю сохранять заявление: {statement["number"]}')
+                parser.save_statement_faces(link, name_dir)
+    else:
+        parser.save_statement_organizations()
 
 
 def main():
