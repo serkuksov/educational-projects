@@ -17,7 +17,7 @@ class Parser:
     сравнивает, скачивает файлы"""
 
     URL = 'https://www.gosuslugi.ru/'
-    search_for_days_before = 7
+    search_for_days_before = 3
 
     def __init__(self, login, password, organization=0, timeout=7):
         self.login = login
@@ -96,8 +96,20 @@ class Parser:
     def search_statements(self):
         while True:
             try:
-                statements_driver = self.driver.find_elements(By.XPATH, '//a[contains(@href,"/order/")]')
-                date_messages_final = statements_driver[-1].find_element(By.XPATH, './div/div/div[1]/div/div[2]/div').text
+                if self.organization == 0:
+                    statements_driver = self.driver.find_elements(By.XPATH, '//a[contains(@href,"/order/")]')
+                    date_messages_final = statements_driver[-1].find_element(By.XPATH, './div/div/div[1]/div/div[2]/div').text
+                else:
+                    statements_driver = self.driver.find_elements(By.XPATH, '//div[@data-ng-include="feedsListTpl"]/div')
+                    date_messages_final = statements_driver[-1].find_element(By.XPATH, './div/a[2]/div/div[1]/div[3]/span').text
+                    split_date_messages_final = date_messages_final.split(' ')
+                    if split_date_messages_final[0] == 'Сегодня':
+                        date_today = datetime.datetime.now().date()
+                    elif split_date_messages_final[0] == 'Вчера':
+                        date_today = datetime.datetime.now().date() - datetime.timedelta(days=1)
+                    else:
+                        date_today = datetime.datetime.strptime(split_date_messages_final[0], '%d.%m.%Y').date()
+                    date_messages_final = date_today.strftime('%d.%m.%y') + ' в ' + split_date_messages_final[-1]
             except:
                 logging.error('Ошибка парсинга!!! Не удалось найти заявки')
                 raise Exception()
@@ -105,7 +117,11 @@ class Parser:
             date_messages_final = datetime.datetime.strptime(date_messages_final, '%d.%m.%y в %H:%M').date()
             logging.info(f'Заявки найдены. Дата последнего сообщения на странице: {date_messages_final}')
             if date_messages_final > control_date:
-                self.page_scrolling()
+                if self.organization==0:
+                    self.page_scrolling()
+                else:
+                    self.driver.find_element(By.XPATH, '//a[contains(text(), "Показать еще")]').click()
+                    time.sleep(self.timeout)
             else:
                 break
         return statements_driver
